@@ -1,42 +1,53 @@
 package com.company;
 
+import com.company.utils.SimpleExecutorService;
 import org.junit.Test;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static com.company.utils.TimeUtils.DEFAULT_THREAD_DELAY;
+import static com.company.utils.TimeUtils.assertDefaultDelay;
+import static org.junit.Assert.*;
 
 public class PoolAcquireTest {
 
-    public static final long DEFAULT_THEAD_DELAY = 1000; // 1 second
 
-    public static final Integer TEST_VAALUE_1 = 1;
+    public static final Integer TEST_VALUE_1 = 1;
 
     @Test()
-    public void shouldGetNulOnClosedPool() throws InterruptedException {
+    public void shouldGetNullOnClosedPool() throws InterruptedException {
         Pool<Integer> pool = new PoolImpl<>();
         assertTrue(pool.acquire() == null);
     }
 
     @Test()
-    public void shouldWaitOnEmptyPool() throws InterruptedException {
+    public void shouldWaitOnEmptyPool() throws ExecutionException, InterruptedException {
         Pool<Integer> pool = new PoolImpl<>();
-        AtomicBoolean threadFinished = new AtomicBoolean(false);
+        AtomicBoolean threadFinished = new AtomicBoolean(true);
         pool.open();
-        new Thread(() -> {
+        SimpleExecutorService executorService = new SimpleExecutorService();
+        executorService.submit(() -> {
+            threadFinished.compareAndSet(true, false);
             try {
-                Thread.sleep(DEFAULT_THEAD_DELAY);
-                threadFinished.compareAndSet(false, true);
-                pool.add(TEST_VAALUE_1);
-
+                Thread.sleep(DEFAULT_THREAD_DELAY);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        }).run();
-        assertEquals(pool.acquire(), TEST_VAALUE_1);
-        assertTrue(threadFinished.get());
+            pool.add(TEST_VALUE_1);
+        });
+        executorService.submit(() -> {
+            try {
+                long start = System.currentTimeMillis();
+                assertEquals(pool.acquire(), TEST_VALUE_1);
+                assertFalse(threadFinished.get());
+                assertDefaultDelay(start);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+        executorService.awaitTermination();
     }
 
     @Test()
@@ -44,10 +55,8 @@ public class PoolAcquireTest {
         Pool<Integer> pool = new PoolImpl<>();
         pool.open();
         long start = System.currentTimeMillis();
-        pool.acquire(DEFAULT_THEAD_DELAY, TimeUnit.MILLISECONDS);
-        System.out.println(System.currentTimeMillis() - start);
-        assertTrue(System.currentTimeMillis() - start - DEFAULT_THEAD_DELAY < 40);
+        assertNull(pool.acquire(DEFAULT_THREAD_DELAY, TimeUnit.MILLISECONDS));
+        assertDefaultDelay(start);
     }
-
 
 }
